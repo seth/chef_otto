@@ -1,0 +1,15 @@
+{application, otto,
+ [
+  {description, ""},
+  {vsn, "0.0.1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib,
+                  crypto,
+                  ibrowse,
+                  couchbeam
+                 ]},
+  {mod, { otto_app, []}},
+  {env, []}
+ ]}.
