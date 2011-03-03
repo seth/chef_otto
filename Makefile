@@ -1,4 +1,4 @@
-.PHONY: deps test clean doc rel
+.PHONY: deps test clean doc rel shell
 
 all: deps
 	@./rebar compile
@@ -23,3 +23,6 @@ clean:
 
 distclean: clean
 	@./rebar delete-deps
+
+shell:
+	erl -pa ebin deps/*/ebin -boot start_sasl -s otto start0
