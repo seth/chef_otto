@@ -7,6 +7,7 @@
          fetch_client/3,
          connect/0,
          connect/2,
+         bulk_get/3,
          start0/0
          ]).
 
@@ -86,6 +87,14 @@ fetch_client(Server, Org, ClientName) when is_binary(ClientName) ->
 fetch_client(Server, Org, ClientName) when is_list(ClientName) ->
     fetch_client(Server, Org, list_to_binary(ClientName)).
 
+bulk_get(Server, DbName, Ids) ->
+    {ok, Db} = couchbeam:open_db(Server, DbName, []),
+    {ok, View} = couchbeam:all_docs(Db, [{keys, Ids}, {include_docs, true}]),
+    DocCollector = fun({Row}, Acc) ->
+                           {Doc} = ?get_val(<<"doc">>, Row),
+                           [Doc|Acc]
+                   end,
+     couchbeam_view:fold(View, DocCollector).
 
 start0() ->
     application:start(sasl),
