@@ -1,6 +1,14 @@
 -module(otto).
 
--compile([export_all]).
+%%-compile([export_all]).
+-export([
+         fetch_user/2,
+         fetch_org/2,
+         fetch_client/3,
+         connect/0,
+         connect/2,
+         start0/0
+         ]).
 
 -define(get_val(Key, PList), proplists:get_value(Key, PList)).
 
