@@ -1,5 +1,4 @@
-
--module(otto_sup).
+-module(chef_otto_sup).
 
 -behaviour(supervisor).
 

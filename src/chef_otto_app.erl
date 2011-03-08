@@ -1,4 +1,4 @@
--module(otto_app).
+-module(chef_otto_app).
 
 -behaviour(application).
 
@@ -10,7 +10,7 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    otto_sup:start_link().
+    chef_otto_sup:start_link().
 
 stop(_State) ->
     ok.

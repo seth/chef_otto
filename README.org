@@ -1,4 +1,8 @@
-* README for opscode-ottoman
+* README for chef_otto
+
+Erlang helper application for communicating with Chef's CouchDB
+server.
+
 
 
 

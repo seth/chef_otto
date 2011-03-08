@@ -1,6 +1,5 @@
--module(otto).
+-module(chef_otto).
 
-%%-compile([export_all]).
 -export([
          fetch_user/2,
          fetch_org/2,
@@ -101,16 +100,16 @@ start0() ->
     application:start(crypto),
     application:start(ibrowse),
     application:start(couchbeam),
-    {ok, otto_start}.
+    {ok, chef_otto_start}.
 
 
 -ifdef(TEST).
 otto_integration_test_() ->
-    {ok, otto_start} = otto:start0(),
-    S = otto:connect(),
+    {ok, chef_otto_start} = chef_otto:start0(),
+    S = chef_otto:connect(),
     [{"fetch_user found",
       fun() ->
-              Got = otto:fetch_user(S, "clownco-org-admin"),
+              Got = chef_otto:fetch_user(S, "clownco-org-admin"),
               ?assertEqual(<<"ClowncoOrgAdmin">>,
                            ?get_val(<<"display_name">>, Got))
       end},
@@ -119,12 +118,12 @@ otto_integration_test_() ->
       fun() ->
               ?assertEqual({user_not_found, <<"fred-is-not-found">>,
                             not_in_view},
-                           otto:fetch_user(S, "fred-is-not-found"))
+                           chef_otto:fetch_user(S, "fred-is-not-found"))
       end},
 
      {"fetch_org",
       fun() ->
-              Org = otto:fetch_org(S, <<"clownco">>),
+              Org = chef_otto:fetch_org(S, <<"clownco">>),
               ?assertEqual(<<"clownco-validator">>,
                            ?get_val(<<"clientname">>, Org))
       end
@@ -132,8 +131,8 @@ otto_integration_test_() ->
 
      {"fetch_client",
       fun() ->
-              Org = otto:fetch_org(S, <<"clownco">>),
-              Client = otto:fetch_client(S, Org, <<"clownco-validator">>),
+              Org = chef_otto:fetch_org(S, <<"clownco">>),
+              Client = chef_otto:fetch_client(S, Org, <<"clownco-validator">>),
               ?assertEqual(<<"clownco">>, ?get_val(<<"orgname">>, Client))
       end
      }

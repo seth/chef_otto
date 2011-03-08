@@ -25,4 +25,4 @@ distclean: clean
 	@./rebar delete-deps
 
 shell:
-	erl -pa ebin deps/*/ebin -boot start_sasl -s otto start0
+	erl -pa ebin deps/*/ebin -boot start_sasl -s chef_otto start0
