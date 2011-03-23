@@ -10,7 +10,7 @@
          start0/0
          ]).
 
--define(get_val(Key, PList), proplists:get_value(Key, PList)).
+-define(gv(Key, PList), proplists:get_value(Key, PList)).
 
 -define(user_db, "opscode_account").
 
@@ -40,13 +40,13 @@ fetch_user(Server, User) when is_binary(User) ->
                                 [{key, User}]),
     case couchbeam_view:first(View) of
         {ok, {Row}} ->  
-            UserId = proplists:get_value(<<"id">>, Row),
+            UserId = ?gv(<<"id">>, Row),
             case couchbeam:open_doc(Db, UserId) of
-                {error, not_found} -> {user_not_found, User, {no_doc, UserId}};
+                {error, not_found} -> {user_not_found, {no_doc, UserId}};
                 {ok, {UserDoc}}    -> UserDoc
             end;
         {ok, []} ->
-            {user_not_found, User, not_in_view}
+            {user_not_found, not_in_view}
     end;
 fetch_user(Server, User) when is_list(User) ->
     fetch_user(Server, list_to_binary(User)).
@@ -57,7 +57,7 @@ fetch_org(Server, OrgName) when is_binary(OrgName) ->
                                 [{key, OrgName}]),
     case couchbeam_view:first(View) of
         {ok, {Row}} ->
-            OrgDocId = proplists:get_value(<<"id">>, Row),
+            OrgDocId = ?gv(<<"id">>, Row),
             case couchbeam:open_doc(Db, OrgDocId) of
                 {error, not_found} -> {org_not_found, OrgName, {no_doc, OrgDocId}};
                 {ok, {OrgDoc}} -> OrgDoc
@@ -68,14 +68,14 @@ fetch_org(Server, OrgName) when is_binary(OrgName) ->
 fetch_org(Server, OrgName) when is_list(OrgName) ->
     fetch_org(Server, list_to_binary(OrgName)).
 
-fetch_client(Server, Org, ClientName) when is_binary(ClientName) ->
-    ChefDb = "chef_" ++ proplists:get_value(<<"guid">>, Org),
+fetch_client(Server, Org, ClientName) when is_binary(ClientName); is_list(Org) ->
+    ChefDb = "chef_" ++ ?gv(<<"guid">>, Org),
     {ok, Db} = couchbeam:open_db(Server, ChefDb, []),
     {ok, View} = couchbeam:view(Db, {?mixlib_auth_client_design, "by_clientname"},
                                 [{key, ClientName}]),
     case couchbeam_view:first(View) of
         {ok, {Row}} ->
-            ClientId = proplists:get_value(<<"id">>, Row),
+            ClientId = ?gv(<<"id">>, Row),
             case couchbeam:open_doc(Db, ClientId) of
                 {error, not_found} -> {client_not_found, ClientName, {no_doc, ClientId}};
                 {ok, {ClientDoc}} -> ClientDoc
@@ -83,14 +83,16 @@ fetch_client(Server, Org, ClientName) when is_binary(ClientName) ->
         {ok, []} ->
             {client_not_found, ClientName, not_in_view}
     end;
-fetch_client(Server, Org, ClientName) when is_list(ClientName) ->
-    fetch_client(Server, Org, list_to_binary(ClientName)).
+fetch_client(Server, Org, ClientName) when is_list(ClientName); is_list(Org) ->
+    fetch_client(Server, Org, list_to_binary(ClientName));
+fetch_client(Server, Reason={org_not_found, OrgName, Why}, ClientName) ->
+    {client_not_found, ClientName, Reason}.
 
 bulk_get(Server, DbName, Ids) ->
     {ok, Db} = couchbeam:open_db(Server, DbName, []),
     {ok, View} = couchbeam:all_docs(Db, [{keys, Ids}, {include_docs, true}]),
     DocCollector = fun({Row}, Acc) ->
-                           {Doc} = ?get_val(<<"doc">>, Row),
+                           {Doc} = ?gv(<<"doc">>, Row),
                            [Doc|Acc]
                    end,
      couchbeam_view:fold(View, DocCollector).
@@ -111,13 +113,12 @@ otto_integration_test_() ->
       fun() ->
               Got = chef_otto:fetch_user(S, "clownco-org-admin"),
               ?assertEqual(<<"ClowncoOrgAdmin">>,
-                           ?get_val(<<"display_name">>, Got))
+                           ?gv(<<"display_name">>, Got))
       end},
 
      {"fetch_user not found",
       fun() ->
-              ?assertEqual({user_not_found, <<"fred-is-not-found">>,
-                            not_in_view},
+              ?assertEqual({user_not_found, not_in_view},
                            chef_otto:fetch_user(S, "fred-is-not-found"))
       end},
 
@@ -125,7 +126,7 @@ otto_integration_test_() ->
       fun() ->
               Org = chef_otto:fetch_org(S, <<"clownco">>),
               ?assertEqual(<<"clownco-validator">>,
-                           ?get_val(<<"clientname">>, Org))
+                           ?gv(<<"clientname">>, Org))
       end
      },
 
@@ -133,7 +134,7 @@ otto_integration_test_() ->
       fun() ->
               Org = chef_otto:fetch_org(S, <<"clownco">>),
               Client = chef_otto:fetch_client(S, Org, <<"clownco-validator">>),
-              ?assertEqual(<<"clownco">>, ?get_val(<<"orgname">>, Client))
+              ?assertEqual(<<"clownco">>, ?gv(<<"orgname">>, Client))
       end
      }
 
