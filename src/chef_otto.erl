@@ -3,7 +3,9 @@
 -export([
          fetch_user/2,
          fetch_org/2,
+         fetch_org_id/2,
          fetch_client/3,
+         fetch_user_or_client_cert/3,
          connect/0,
          connect/2,
          bulk_get/3,
@@ -12,7 +14,7 @@
 
 -type couchbeam_server() :: any().
 -type http_port() :: non_neg_integer().
--type user() :: binary() | string().
+-type db_key() :: binary() | string().
 
 -define(gv(Key, PList), proplists:get_value(Key, PList)).
 
@@ -40,7 +42,7 @@ connect() ->
 connect(Host, Port) ->
     couchbeam:server_connection(Host, Port, "", []).
 
--spec fetch_user(couchbeam_server(), user()) -> [tuple()]
+-spec fetch_user(couchbeam_server(), db_key()) -> [tuple()]
                                                     | {user_not_found,
                                                        not_in_view}
                                                     | {user_not_found,
@@ -61,6 +63,13 @@ fetch_user(Server, User) when is_binary(User) ->
     end;
 fetch_user(Server, User) when is_list(User) ->
     fetch_user(Server, list_to_binary(User)).
+
+-spec fetch_org_id(couchbeam_server(), binary()) -> binary() | not_found.
+fetch_org_id(Server, OrgName) when is_binary(OrgName) ->
+    case fetch_org(Server, OrgName) of
+        {org_not_found, _} -> not_found;
+        Org when is_list(Org) -> ?gv(<<"guid">>, Org)
+    end.
 
 -spec fetch_org(couchbeam_server(), binary()) ->
     [tuple()]
@@ -83,14 +92,11 @@ fetch_org(Server, OrgName) when is_binary(OrgName) ->
 fetch_org(Server, OrgName) when is_list(OrgName) ->
     fetch_org(Server, list_to_binary(OrgName)).
 
--spec fetch_client(couchbeam_server(), [tuple()] | {org_not_found, _},
-                   binary() | string()) ->
-    [tuple()]
-        | {client_not_found, not_in_view}
-        | {client_not_found, {no_doc, binary()}}
-        | {client_not_found, {org_not_found, _}}.
-fetch_client(Server, Org, ClientName) when is_binary(ClientName), is_list(Org) ->
-    ChefDb = "chef_" ++ ?gv(<<"guid">>, Org),
+-spec fetch_client(couchbeam_server(), binary() | not_found,
+                   binary() | string()) -> [tuple()] | not_found.
+fetch_client(Server, OrgId, ClientName)
+  when is_binary(ClientName), is_binary(OrgId) ->
+    ChefDb = [<<"chef_">>, OrgId],
     {ok, Db} = couchbeam:open_db(Server, ChefDb, []),
     {ok, View} = couchbeam:view(Db, {?mixlib_auth_client_design, "by_clientname"},
                                 [{key, ClientName}]),
@@ -98,16 +104,39 @@ fetch_client(Server, Org, ClientName) when is_binary(ClientName), is_list(Org) -
         {ok, {Row}} ->
             ClientId = ?gv(<<"id">>, Row),
             case couchbeam:open_doc(Db, ClientId) of
-                {error, not_found} -> {client_not_found, {no_doc, ClientId}};
+                % {client_not_found, {no_doc, ClientId}}
+                {error, not_found} -> not_found;
                 {ok, {ClientDoc}} -> ClientDoc
             end;
-        {ok, []} ->
-            {client_not_found, not_in_view}
+        {ok, []} -> not_found
     end;
-fetch_client(Server, Org, ClientName) when is_list(ClientName), is_list(Org) ->
-    fetch_client(Server, Org, list_to_binary(ClientName));
-fetch_client(_Server, Reason={org_not_found, _}, _ClientName) ->
-    {client_not_found, Reason}.
+fetch_client(Server, OrgId, ClientName) when is_list(ClientName), is_binary(OrgId) ->
+    fetch_client(Server, OrgId, list_to_binary(ClientName));
+fetch_client(_Server, not_found, _ClientName) ->
+    not_found.
+
+% FIXME: do we want to distinguish between client not found and org not found?
+-spec fetch_user_or_client_cert(couchbeam_server(), db_key(), db_key()) ->
+    [tuple()] | not_found.
+fetch_user_or_client_cert(Server, OrgName, ClientName)
+  when is_binary(OrgName), is_binary(ClientName) ->
+    case fetch_user(Server, ClientName) of
+        {user_not_found, _} ->
+            OrgId = fetch_org_id(Server, OrgName),
+            case fetch_client(Server, OrgId, ClientName) of
+                not_found -> not_found;
+                Client when is_list(Client) ->
+                    Cert = ?gv(<<"certificate">>, Client),
+                    [{cert, Cert}, {type, client}, {org_guid, OrgId}]
+            end;
+        UserDoc ->
+            [{cert, ?gv(<<"certificate">>, UserDoc)}, {type, user}]
+    end;
+fetch_user_or_client_cert(Server, OrgName, ClientName)
+  when is_list(OrgName), is_list(ClientName) ->
+    fetch_user_or_client_cert(Server, list_to_binary(OrgName),
+                              list_to_binary(ClientName)).
+
 
 -spec bulk_get(couchbeam_server(), string(), [binary()]) ->
     [[tuple()]].
@@ -166,25 +195,27 @@ otto_integration_test_() ->
 
      {"fetch_client",
       fun() ->
-              Org = chef_otto:fetch_org(S, <<"clownco">>),
-              Client = chef_otto:fetch_client(S, Org, <<"clownco-validator">>),
+              OID = ?gv(<<"guid">>, chef_otto:fetch_org(S, <<"clownco">>)),
+              Client = chef_otto:fetch_client(S, OID, <<"clownco-validator">>),
               ?assertEqual(<<"clownco">>, ?gv(<<"orgname">>, Client))
       end
      },
 
      {"fetch_client no such client",
       fun() ->
-              Org = chef_otto:fetch_org(S, <<"clownco">>),
-              ?assertEqual({client_not_found, not_in_view},
-                 chef_otto:fetch_client(S, Org, <<"not-a-known-client">>))
+              Org = ?gv(<<"guid">>, chef_otto:fetch_org(S, <<"clownco">>)),
+              ?assertEqual(not_found,
+                           chef_otto:fetch_client(S, Org,
+                                                  <<"not-a-known-client">>))
       end
      },
 
      {"fetch_client with missing org",
       fun() ->
-              Org = chef_otto:fetch_org(S, <<"no-such-org">>),
-              ?assertEqual({client_not_found, {org_not_found, not_in_view}},
-                 chef_otto:fetch_client(S, Org, <<"not-a-known-client">>))
+              OID = chef_otto:fetch_org_id(S, <<"no-such-org">>),
+              ?assertEqual(not_found,
+                           chef_otto:fetch_client(S, OID,
+                                                  <<"not-a-known-client">>))
       end
      }
 
