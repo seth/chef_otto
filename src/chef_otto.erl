@@ -2,6 +2,7 @@
 
 -export([
          fetch_user/2,
+         fetch_all_users/1,
          fetch_org/2,
          fetch_org_id/2,
          fetch_client/3,
@@ -63,6 +64,19 @@ fetch_user(Server, User) when is_binary(User) ->
     end;
 fetch_user(Server, User) when is_list(User) ->
     fetch_user(Server, list_to_binary(User)).
+
+fetch_all_users(Server) ->
+    {ok, Db} = couchbeam:open_db(Server, ?user_db, []),
+    {ok, View} = couchbeam:view(Db, {?mixlib_auth_user_design, "by_username"},
+                                [{include_docs, true}]),
+    case couchbeam_view:fetch(View) of
+        {ok, {Res}} ->
+            ?gv(<<"rows">>, Res);
+        Error ->
+            Error
+    end.
+
+
 
 -spec fetch_org_id(couchbeam_server(), binary()) -> binary() | not_found.
 fetch_org_id(Server, OrgName) when is_binary(OrgName) ->
