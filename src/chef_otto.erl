@@ -7,6 +7,7 @@
          fetch_org_id/2,
          fetch_client/3,
          fetch_user_or_client_cert/3,
+         fetch_auth_join/2,
          connect/0,
          connect/2,
          bulk_get/3,
@@ -20,6 +21,7 @@
 -define(gv(Key, PList), proplists:get_value(Key, PList)).
 
 -define(user_db, "opscode_account").
+-define(auth_join_db, "opscode_account").
 
 -define(mixlib_auth_user_design,
         "Mixlib::Authorization::Models::User-e8e718b2cc7860fc5d5beb40adc8511a").
@@ -30,6 +32,8 @@
 -define(mixlib_auth_client_design,
         "Mixlib::Authorization::Models::Client-fec21b157b76e08b86e92ef7cbc2be81").
 
+-define(mixlib_auth_join_design,
+        "Mixlib::Authorization::AuthJoin-25834c5a8d6a9586adb05320f3f725e8").
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -162,6 +166,20 @@ bulk_get(Server, DbName, Ids) ->
                            [Doc|Acc]
                    end,
      couchbeam_view:fold(View, DocCollector).
+
+
+-spec fetch_auth_join(couchbeam_server(), db_key()) -> [tuple()]
+                                                    | {not_found, term()}.
+fetch_auth_join(Server, ObjectId) when is_binary(ObjectId) ->
+    {ok, Db} = couchbeam:open_db(Server, ?auth_join_db, []),
+    {ok, View} = couchbeam:view(Db, {?mixlib_auth_join_design, "by_user_object_id"},
+                                [{key, ObjectId}, {include_docs, true}]),
+    case couchbeam_view:first(View) of
+        {ok, {Row}} -> ?gv(<<"doc">>, Row);
+        Why -> {not_found, Why}
+    end;
+fetch_auth_join(Server, ObjectId) when is_list(ObjectId) ->
+    fetch_auth_join(Server, list_to_binary(ObjectId)).
 
 start0() ->
     application:start(sasl),
